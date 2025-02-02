@@ -1,0 +1,6 @@
+.env
+.uki
+/migrations
+/target
+/.vscode
+/data
