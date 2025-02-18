@@ -25,8 +25,9 @@ impl FileSystemService {
     let path = Path::new(&path_str);
 
     if path.exists() {
-      fs::remove_file(path)
-        .await?;
+      return Ok(())
+      // fs::remove_file(path)
+        // .await?;
     }
 
     let mut file = File::create_new(path)

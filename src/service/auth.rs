@@ -31,18 +31,15 @@ impl AuthService {
     Ok(result.json().await?)
   }
 
-  pub async fn check_token_owner(
-    token: String,
-    username: &String
-  ) -> HttpResult<()> {
+  pub async fn get_token_owner(token: String) -> HttpResult<String> {
     let result = Self::get_by_token(token)
       .await
       .map_err(|_| HttpError::new("Невалидный токен", Some(StatusCode::UNAUTHORIZED)))?;
 
-    if &result.username != username {
-      return Err(HttpError::new("Невалидный токен (1)", Some(StatusCode::UNAUTHORIZED)))
-    }
+    // if &result.username != username {
+    //   return Err(HttpError::new("Невалидный токен (1)", Some(StatusCode::UNAUTHORIZED)))
+    // }
 
-    Ok(())
+    Ok(result.username)
   }
 }

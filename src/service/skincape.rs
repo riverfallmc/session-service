@@ -1,10 +1,10 @@
 use std::{fs, path::PathBuf};
 use anyhow::anyhow;
 use axum::{extract::Multipart, http::StatusCode, response::Response, Json};
-use dixxxie::response::{HttpError, HttpMessage, HttpResult};
+use dixxxie::{connection::DbPooled, response::{HttpError, HttpMessage, HttpResult}};
 use once_cell::sync::Lazy;
-use crate::service::auth::AuthService;
-use super::{fs::FileSystemService, multipart::MultipartService};
+use crate::{models::users::User, repository::users::UsersRepository, service::auth::AuthService};
+use super::{fs::FileSystemService, hasher::HasherService, multipart::MultipartService};
 
 pub static SKINS_BASEDIR: Lazy<PathBuf> = Lazy::new(|| PathBuf::from("/app/data/skins"));
 pub static CAPES_BASEDIR: Lazy<PathBuf> = Lazy::new(|| PathBuf::from("/app/data/capes"));
@@ -15,21 +15,26 @@ static BASE_URL: Lazy<String> = Lazy::new(|| {
   if cfg!(debug_assertions) {String::from("https://localhost")} else {String::from("https://localhost")}
 });
 
+enum FileSaveType {
+  Skin,
+  Cape
+}
+
 pub struct SkinCapeService;
 
 impl SkinCapeService {
-  fn format_username(username: &str) -> String {
-    if let Some(dot_index) = username.rfind('.') {
-      format!("{}.png", &username[..dot_index])
+  fn format_img(img: &str) -> String {
+    if let Some(dot_index) = img.rfind('.') {
+      format!("{}.png", &img[..dot_index])
     } else {
-      format!("{username}.png")
+      format!("{img}.png")
     }
   }
 
-  fn find_skin(
-    username: &str
+  pub fn find_skin(
+    img: &str
   ) -> Option<PathBuf> {
-    let path = SKINS_BASEDIR.join(Self::format_username(username));
+    let path = SKINS_BASEDIR.join(Self::format_img(img));
 
     if !path.exists() {
       return None;
@@ -38,10 +43,10 @@ impl SkinCapeService {
     Some(path)
   }
 
-  fn find_cape(
-    username: &str
+  pub fn find_cape(
+    img: &str
   ) -> Option<PathBuf> {
-    let path = CAPES_BASEDIR.join(Self::format_username(username));
+    let path = CAPES_BASEDIR.join(Self::format_img(img));
 
     if !path.exists() {
       return None
@@ -50,28 +55,70 @@ impl SkinCapeService {
     Some(path)
   }
 
+  #[allow(unused)]
   pub fn get_skin_url(
+    db: &mut DbPooled,
     username: &str
   ) -> HttpResult<String> {
-    Self::find_skin(username)
-      .ok_or_else(|| HttpError::new("Скин не был найден", Some(StatusCode::NOT_FOUND)))?;
+    let user = UsersRepository::get_by_username(db, username.to_string())?;
 
-    Ok(format!("{}/api/session/skin/{username}.png", *BASE_URL))
+    if user.is_none() {
+      return Err(HttpError::new("Игрок не был найден", Some(StatusCode::NOT_FOUND)));
+    }
+
+    Self::check_skin_url(&user.unwrap())
   }
 
+  pub fn check_skin_url(
+    user: &User
+  ) -> HttpResult<String> {
+    let img = user.skin
+      .clone();
+
+    if let Some(skin) = img {
+      Self::find_skin(&skin)
+        .ok_or_else(|| HttpError::new("Скин не был найден", Some(StatusCode::NOT_FOUND)))?;
+
+      return Ok(format!("{}/api/session/skin/{skin}.png", *BASE_URL));
+    }
+
+     Err(HttpError::new("Скин не был найден", Some(StatusCode::NOT_FOUND)))
+  }
+
+  #[allow(unused)]
   pub fn get_cape_url(
+    db: &mut DbPooled,
     username: &str
   ) -> HttpResult<String> {
-    Self::find_cape(username)
-      .ok_or_else(|| HttpError::new("Плащ не был найден", Some(StatusCode::NOT_FOUND)))?;
+    let user = UsersRepository::get_by_username(db, username.to_string())?;
 
-    Ok(format!("{}/api/session/cape/{username}.png", *BASE_URL))
+    if user.is_none() {
+      return Err(HttpError::new("Игрок не был найден", Some(StatusCode::NOT_FOUND)));
+    }
+
+    Self::check_cape_url(&user.unwrap())
+  }
+
+  pub fn check_cape_url(
+    user: &User
+  ) -> HttpResult<String> {
+    let img = user.skin
+      .clone();
+
+    if let Some(cape) = img {
+      Self::find_cape(&cape)
+        .ok_or_else(|| HttpError::new("Плащ не был найден", Some(StatusCode::NOT_FOUND)))?;
+
+      return Ok(format!("{}/api/session/cape/{cape}.png", *BASE_URL));
+    }
+
+     Err(HttpError::new("Плащ не был найден", Some(StatusCode::NOT_FOUND)))
   }
 
   pub async fn get_skin(
-    username: String
+    img: String
   ) -> HttpResult<Response> {
-    let path = Self::find_skin(&username)
+    let path = Self::find_skin(&img)
       .ok_or_else(|| HttpError::new("Скин не был найден", Some(StatusCode::NOT_FOUND)))?;
 
     FileSystemService::read_file(path)
@@ -79,9 +126,9 @@ impl SkinCapeService {
   }
 
   pub async fn get_cape(
-    username: String
+    img: String
   ) -> HttpResult<Response> {
-    let path = Self::find_cape(&username)
+    let path = Self::find_cape(&img)
       .ok_or_else(|| HttpError::new("Плащ не был найден", Some(StatusCode::NOT_FOUND)))?;
 
     FileSystemService::read_file(path)
@@ -89,40 +136,59 @@ impl SkinCapeService {
   }
 
   async fn save_file(
+    db: &mut DbPooled,
     token: String,
-    username: String,
     multipart: Multipart,
-    success: &str,
-    save_in: &str
+    success_text: &str,
+    r#type: FileSaveType
   ) -> HttpResult<Json<HttpMessage>> {
-    AuthService::check_token_owner(token, &username)
+    let username = AuthService::get_token_owner(token)
       .await?;
 
     let content = MultipartService::read(multipart)
       .await?;
 
-    FileSystemService::save(save_in, format!("{username}.png"), content)
+    let save_in = match r#type {
+      FileSaveType::Skin => "skins",
+      FileSaveType::Cape => "capes"
+    };
+
+    let hashed = HasherService::sha1_bytes(&content);
+    let img = format!("{hashed}.png");
+
+    FileSystemService::save(save_in, img.clone(), content)
       .await
       .map_err(|e| HttpError(anyhow!("Не получилось сохранить: {e}"), None))?;
 
-    Ok(Json(HttpMessage::new(success)))
+    match r#type {
+      FileSaveType::Skin => {
+        UsersRepository::set_skin(db, username, Some(img))
+          .await?;
+      },
+      FileSaveType::Cape => {
+        UsersRepository::set_cape(db, username, Some(img))
+          .await?;
+      }
+    }
+
+    Ok(Json(HttpMessage::new(success_text)))
   }
 
   pub async fn update_skin(
+    db: &mut DbPooled,
     token: String,
-    username: String,
     skin: Multipart
   ) -> HttpResult<Json<HttpMessage>> {
-    Self::save_file(token, username, skin, "Скин был успешно применён", "skins")
+    Self::save_file(db, token, skin, "Скин был успешно применён", FileSaveType::Skin)
       .await
   }
 
   pub async fn update_cape(
+    db: &mut DbPooled,
     token: String,
-    username: String,
     cape: Multipart
   ) -> HttpResult<Json<HttpMessage>> {
-    Self::save_file(token, username, cape, "Плащ был успешно применён", "capes")
+    Self::save_file(db, token, cape, "Плащ был успешно применён", FileSaveType::Cape)
     .await
   }
 

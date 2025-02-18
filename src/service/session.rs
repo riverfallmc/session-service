@@ -1,28 +1,32 @@
 #![allow(dead_code)]
 
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use base64::Engine;
 use dixxxie::{connection::DbPooled, response::{HttpError, HttpResult}};
 use reqwest::StatusCode;
-use crate::{models::session::{PlayerJoinResponse, PlayerJoinResponseProperty, PlayerJoinResponsePropertyValue, PlayerJoinResponseTextures, SessionData, TextureData}, repository::session::SessionRepository, service::auth::AuthService};
+use crate::{models::session::{PlayerJoinResponse, PlayerJoinResponseProperty, PlayerJoinResponsePropertyValue, PlayerJoinResponseTextures, SessionData, TextureData}, repository::{session::SessionRepository, users::UsersRepository}, service::auth::AuthService};
 use super::{signer::SignerService, skincape::SkinCapeService, time::TimeService};
 
 pub struct SessionService;
 
 impl SessionService {
   async fn get_player_textures(
+    db: &mut DbPooled,
     id: String,
     name: String
   ) -> HttpResult<PlayerJoinResponsePropertyValue> {
     let mut textures = PlayerJoinResponseTextures::default();
 
-    if let Ok(url) = SkinCapeService::get_skin_url(&name) {
+    let user = UsersRepository::get_by_username(db, name.clone())?
+      .context(anyhow!("Игрок не был найден"))?;
+
+    if let Ok(url) = SkinCapeService::check_skin_url(&user) {
       textures.skin = Some(TextureData {
         url
       })
     }
 
-    if let Ok(url) = SkinCapeService::get_cape_url(&name) {
+    if let Ok(url) = SkinCapeService::check_cape_url(&user) {
       textures.cape = Some(TextureData {
         url
       })
@@ -39,11 +43,12 @@ impl SessionService {
   }
 
   async fn user_profile(
+    db: &mut DbPooled,
     id: String,
     name: String,
     unsigned: bool
   ) -> HttpResult<PlayerJoinResponse> {
-    let textures = Self::get_player_textures(id.clone(), name.clone())
+    let textures = Self::get_player_textures(db, id.clone(), name.clone())
       .await?;
 
     let value = base64::engine::general_purpose::STANDARD
@@ -99,7 +104,7 @@ impl SessionService {
       return Err(HttpError::new("Сессия не была найдена", Some(StatusCode::UNAUTHORIZED)));
     }
 
-    Self::user_profile(session.uuid, username, false)
+    Self::user_profile(db, session.uuid, username, false)
       .await
   }
 
@@ -111,7 +116,7 @@ impl SessionService {
     let session = SessionRepository::find_by_uuid(db, uuid.clone())
       .map_err(|_| HttpError::new("Сессия не была найдена", Some(StatusCode::UNAUTHORIZED)))?;
 
-    Self::user_profile(session.uuid, session.username, unsigned)
+    Self::user_profile(db, session.uuid, session.username, unsigned)
       .await
   }
 }

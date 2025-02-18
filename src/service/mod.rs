@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod fs;
+pub mod hasher;
 pub mod multipart;
 pub mod random;
 pub mod session;

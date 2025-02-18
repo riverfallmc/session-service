@@ -1,5 +1,5 @@
 use anyhow::Context;
-use axum::{extract::{Multipart, Path}, http::HeaderMap, response::Response, routing::{get, post}, Json};
+use axum::{extract::{Multipart, Path, State}, http::HeaderMap, response::Response, routing::{get, post}, Json};
 use dixxxie::{controller::Controller, response::{HttpError, HttpMessage, HttpResult}};
 use reqwest::StatusCode;
 use crate::{service::skincape::SkinCapeService, AppState};
@@ -8,16 +8,16 @@ pub struct SkinCapeController;
 
 impl SkinCapeController {
   async fn get_skin(
-    Path(username): Path<String>
+    Path(img): Path<String>
   ) -> HttpResult<Response> {
-    SkinCapeService::get_skin(username)
+    SkinCapeService::get_skin(img)
       .await
   }
 
   async fn get_cape(
-    Path(username): Path<String>
+    Path(img): Path<String>
   ) -> HttpResult<Response> {
-    SkinCapeService::get_cape(username)
+    SkinCapeService::get_cape(img)
       .await
   }
 
@@ -44,23 +44,25 @@ impl SkinCapeController {
   }
   async fn update_skin(
     headers: HeaderMap,
-    Path(username): Path<String>,
+    State(state): State<AppState>,
     multipart: Multipart,
   ) -> HttpResult<Json<HttpMessage>> {
     let token = Self::get_authorization(&headers)?;
+    let mut db = state.postgres.get()?;
 
-    SkinCapeService::update_skin(token, username, multipart)
+    SkinCapeService::update_skin(&mut db, token, multipart)
       .await
   }
 
   async fn update_cape(
     headers: HeaderMap,
-    Path(username): Path<String>,
+    State(state): State<AppState>,
     multipart: Multipart,
   ) -> HttpResult<Json<HttpMessage>> {
     let token = Self::get_authorization(&headers)?;
+    let mut db = state.postgres.get()?;
 
-    SkinCapeService::update_cape(token, username, multipart)
+    SkinCapeService::update_cape(&mut db, token, multipart)
       .await
   }
 }
@@ -71,10 +73,10 @@ impl Controller<AppState> for SkinCapeController {
       .expect("unable to create dirs");
 
     router
-      .route("/skin/{username}", get(Self::get_skin))
-      .route("/cape/{username}", get(Self::get_cape))
+      .route("/skin/{img}", get(Self::get_skin))
+      .route("/cape/{img}", get(Self::get_cape))
 
-      .route("/skin/{username}", post(Self::update_skin))
-      .route("/cape/{username}", post(Self::update_cape))
+      .route("/skin", post(Self::update_skin))
+      .route("/cape", post(Self::update_cape))
   }
 }
