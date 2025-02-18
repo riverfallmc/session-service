@@ -7,7 +7,7 @@ use reqwest::StatusCode;
 pub struct MultipartService;
 
 // Mb
-const MAX_FILE_SIZE: usize = 3;
+const MAX_FILE_SIZE: usize = 2 * (1024 * 1024);
 
 impl MultipartService {
   pub async fn read(mut multipart: Multipart) -> HttpResult<Vec<u8>> {

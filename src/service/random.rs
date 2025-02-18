@@ -1,33 +1,40 @@
 use anyhow::Result;
-use num_bigint::BigInt;
-use sha1::{Digest, Sha1};
-
+use rand::{rng, RngCore};
+use sha2::{Sha256, Digest};
 use super::time::TimeService;
 
 pub struct RandomService;
 
 impl RandomService {
-  fn digest(
-    username: String
-  ) -> Vec<u8> {
-    let mut hasher = Sha1::new();
-    hasher.update(username.as_bytes());
-    hasher.finalize().to_vec()
-  }
-
+  // always must be md5!! (32 symbols)
   pub fn generate_uuid(
     username: String
-  ) -> String {
-    BigInt::from_signed_bytes_be(&Self::digest(username))
-      .to_str_radix(16)
+  ) -> Result<String> {
+    let timestamp = TimeService::get_timestamp()?.to_string();
+    let data = format!("{username}{timestamp}");
+    Ok(hex::encode(md5::compute(data).0))
   }
 
-  pub fn generate_access(
-    username: String
-  ) -> Result<String> {
-    let time = &TimeService::get_timestamp()?
-      .to_string();
+  pub fn generate_access_token() -> String {
+    let mut rng = rng();
+    let mut bytes = [0u8; 16];
+    rng.fill_bytes(&mut bytes);
 
-    Ok(Self::generate_uuid(username + time))
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hex::encode(hasher.finalize())
+  }
+}
+
+mod tests {
+  #[test]
+  fn uuid() -> anyhow::Result<()> {
+    use crate::service::random::RandomService;
+    let generated_uuid = RandomService::generate_uuid(String::from("smokingplaya"))?;
+
+    println!("uuid: {}", generated_uuid);
+    assert!(generated_uuid.len() == 32);
+
+    Ok(())
   }
 }

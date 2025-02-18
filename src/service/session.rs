@@ -3,53 +3,61 @@
 use anyhow::anyhow;
 use base64::Engine;
 use dixxxie::{connection::DbPooled, response::{HttpError, HttpResult}};
-use once_cell::sync::Lazy;
 use reqwest::StatusCode;
 use crate::{models::session::{PlayerJoinResponse, PlayerJoinResponseProperty, PlayerJoinResponsePropertyValue, PlayerJoinResponseTextures, SessionData, TextureData}, repository::session::SessionRepository, service::auth::AuthService};
-use super::{signer::SignerService, time::TimeService};
-
-static BASE_URL: Lazy<String> = Lazy::new(|| {
-  if cfg!(debug_assertions) {String::from("https://localhost")} else {String::from("https://riverfall.ru")}
-});
+use super::{signer::SignerService, skincape::SkinCapeService, time::TimeService};
 
 pub struct SessionService;
 
 impl SessionService {
-  fn get_player_textures(
+  async fn get_player_textures(
     id: String,
     name: String
   ) -> HttpResult<PlayerJoinResponsePropertyValue> {
+    let mut textures = PlayerJoinResponseTextures::default();
+
+    if let Ok(url) = SkinCapeService::get_skin_url(&name) {
+      textures.skin = Some(TextureData {
+        url
+      })
+    }
+
+    if let Ok(url) = SkinCapeService::get_cape_url(&name) {
+      textures.cape = Some(TextureData {
+        url
+      })
+    }
+
     let textures = PlayerJoinResponsePropertyValue {
       timestamp: TimeService::get_timestamp()?,
       profile_id: id,
       profile_name: name.clone(),
-      textures: PlayerJoinResponseTextures {
-        skin: TextureData {
-          url: format!("{}/api/session/skin/{name}.png", *BASE_URL)
-        },
-        cape: Some(TextureData {
-          url: format!("{}/api/session/cape/{name}.png", *BASE_URL)
-        })
-      },
+      textures,
     };
 
     Ok(textures)
   }
 
-  fn collect_join_response(
+  async fn user_profile(
     id: String,
-    name: String
+    name: String,
+    unsigned: bool
   ) -> HttpResult<PlayerJoinResponse> {
-    let textures = Self::get_player_textures(id.clone(), name.clone())?;
-    let value = serde_json::to_string(&textures)?;
-    let value_encoded = base64::engine::general_purpose::STANDARD
-      .encode(value);
+    let textures = Self::get_player_textures(id.clone(), name.clone())
+      .await?;
 
-    let properties = PlayerJoinResponseProperty {
+    let value = base64::engine::general_purpose::STANDARD
+        .encode(serde_json::to_string(&textures)?);
+
+    let mut properties = PlayerJoinResponseProperty {
       name: String::from("textures"),
-      signature: SignerService::sign(value_encoded.clone())?,
-      value: value_encoded
+      value: value.clone(),
+      signature: Some(String::new())
     };
+
+    if !unsigned {
+      properties.signature = Some(SignerService::sign(&value)?);
+    }
 
     Ok(PlayerJoinResponse {
       id,
@@ -63,7 +71,8 @@ impl SessionService {
     token: String
   ) -> HttpResult<SessionData> {
     let user = AuthService::get_by_token(token)
-      .await?;
+      .await
+      .map_err(|e| anyhow!("Ошибка сервера авторизации: {e}"))?;
 
     let data = SessionRepository::update(db, user)
       .map_err(|e| anyhow!("Неизвестная ошибка: {e}"))?;
@@ -78,7 +87,7 @@ impl SessionService {
     SessionRepository::update_serverid(db, data)
   }
 
-  pub fn has_joined(
+  pub async fn has_joined(
     db: &mut DbPooled,
     username: String,
     server_id: String
@@ -90,6 +99,19 @@ impl SessionService {
       return Err(HttpError::new("Сессия не была найдена", Some(StatusCode::UNAUTHORIZED)));
     }
 
-    Self::collect_join_response(session.uuid, username)
+    Self::user_profile(session.uuid, username, false)
+      .await
+  }
+
+  pub async fn get_profile(
+    db: &mut DbPooled,
+    uuid: String,
+    unsigned: bool
+  ) -> HttpResult<PlayerJoinResponse> {
+    let session = SessionRepository::find_by_uuid(db, uuid.clone())
+      .map_err(|_| HttpError::new("Сессия не была найдена", Some(StatusCode::UNAUTHORIZED)))?;
+
+    Self::user_profile(session.uuid, session.username, unsigned)
+      .await
   }
 }

@@ -11,7 +11,7 @@ impl SessionRepository {
   ) -> HttpResult<Session> {
     let user_id = user.id;
     let username = user.username;
-    let new_accesstoken = RandomService::generate_access(username.clone())?;
+    let new_accesstoken = RandomService::generate_access_token();
 
     db.transaction::<Session, HttpError, _>(|db| {
       let existing_session = sessions::table
@@ -35,7 +35,7 @@ impl SessionRepository {
             id: 0,
             user_id,
             username: username.clone(),
-            uuid: RandomService::generate_uuid(username.clone()),
+            uuid: RandomService::generate_uuid(username.clone())?,
             accesstoken: new_accesstoken.clone(),
             serverid: None,
           };
@@ -73,6 +73,15 @@ impl SessionRepository {
   ) -> HttpResult<Session> {
     Ok(sessions::table
       .filter(sessions::username.eq(username))
+      .first::<Session>(db)?)
+  }
+
+  pub fn find_by_uuid(
+    db: &mut DbPooled,
+    uuid: String
+  ) -> HttpResult<Session> {
+    Ok(sessions::table
+      .filter(sessions::uuid.eq(uuid))
       .first::<Session>(db)?)
   }
 }

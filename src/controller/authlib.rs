@@ -6,6 +6,12 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use crate::AppState;
 
+#[derive(Serialize, Deserialize)]
+struct PublicKey {
+  #[serde(rename="publicKey")]
+  public_key: String
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 struct AuthlibMeta {
   #[serde(rename = "serverName")]
@@ -31,7 +37,7 @@ struct Authlib {
 static AUTHLIB: Lazy<Authlib> = Lazy::new(|| {
   Authlib {
     meta: AuthlibMeta {
-      server_name: String::from("riverfall.ru"),
+      server_name: String::from("riverfall.ru ❤"),
       implementation_name: String::from("riverfall.ru session service"),
       implementation_version: env!("CARGO_PKG_VERSION").to_string(),
       feature_no_mojang_namespace: true,
@@ -62,11 +68,18 @@ impl AuthlibController {
   async fn get_authlib_info() -> Json<Authlib> {
     Json(AUTHLIB.clone())
   }
+
+  async fn pubkeys() -> Json<PublicKey> {
+    Json(PublicKey {
+      public_key: AUTHLIB.clone().signature_publickey
+    })
+  }
 }
 
 impl Controller<AppState> for AuthlibController {
   fn register(&self, router: axum::Router<AppState>) -> axum::Router<AppState> {
     router
       .route("/", get(Self::get_authlib_info))
+      .route("/minecraftservices/publickeys", get(Self::pubkeys))
   }
 }

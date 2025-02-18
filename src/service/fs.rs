@@ -32,7 +32,7 @@ impl FileSystemService {
     let mut file = File::create_new(path)
       .await?;
 
-    file.write(&content)
+    file.write_all(&content)
       .await?;
 
     Ok(())

@@ -6,7 +6,7 @@ use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use crate::controller::session::JWTBody;
 
-static CLIENT: Lazy<Client> = Lazy::new(|| Client::new());
+static CLIENT: Lazy<Client> = Lazy::new(Client::new);
 static AUTH_SERVICE_URL: Lazy<String> = Lazy::new(|| env::var("AUTH_SERVICE_URL").expect("No AUTH_SERVICE_URL"));
 
 #[derive(Serialize, Deserialize)]
@@ -21,9 +21,9 @@ impl AuthService {
   pub async fn get_by_token(
     token: String
   ) -> HttpResult<UserData> {
-    let result = CLIENT.post(format!("http://{}/owner", AUTH_SERVICE_URL.to_string()))
+    let result = CLIENT.post(format!("http://{}/owner", *AUTH_SERVICE_URL))
       .json(&JWTBody {
-        token: token
+        token
       })
       .send()
       .await?;

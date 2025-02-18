@@ -1,6 +1,6 @@
 use std::fs;
-
 use anyhow::Result;
+use base64::{engine::general_purpose::STANDARD, Engine};
 use once_cell::sync::Lazy;
 use openssl::{hash::MessageDigest, pkey::PKey, rsa::Rsa, sign::Signer};
 
@@ -17,12 +17,11 @@ static PRIVATE_KEY: Lazy<PKey<openssl::pkey::Private>> = Lazy::new(|| {
 });
 
 impl SignerService {
-  pub fn sign(
-    data: String
-  ) -> Result<String> {
-    let mut signer = Signer::new(MessageDigest::sha256(), &PRIVATE_KEY)?;
+  pub fn sign(data: &str) -> Result<String> {
+    let mut signer = Signer::new(MessageDigest::sha256(), &*PRIVATE_KEY)?;
     signer.update(data.as_bytes())?;
+    let signature = signer.sign_to_vec()?;
 
-    Ok(String::from_utf8(signer.sign_to_vec()?)?)
+    Ok(STANDARD.encode(signature))
   }
 }

@@ -40,7 +40,8 @@ pub(crate) struct PlayerJoinResponseProperty {
   pub value: String,
   /// Value - BASE64
   /// Signature - Подписанный приватным ключём Value
-  pub signature: String
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub signature: Option<String>
 }
 
 #[derive(Serialize, Deserialize)]
@@ -53,13 +54,15 @@ pub(crate) struct PlayerJoinResponsePropertyValue {
   pub textures: PlayerJoinResponseTextures
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub(crate) struct PlayerJoinResponseTextures {
   /// URL на скин игрока
   #[serde(rename="SKIN")]
-  pub skin: TextureData,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub skin: Option<TextureData>,
   /// URL на плащ игрока
   #[serde(rename="CAPE")]
+  #[serde(skip_serializing_if = "Option::is_none")]
   pub cape: Option<TextureData>
 }
 

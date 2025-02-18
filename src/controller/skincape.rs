@@ -67,6 +67,9 @@ impl SkinCapeController {
 
 impl Controller<AppState> for SkinCapeController {
   fn register(&self, router: axum::Router<AppState>) -> axum::Router<AppState> {
+    SkinCapeService::valid_folders()
+      .expect("unable to create dirs");
+
     router
       .route("/skin/{username}", get(Self::get_skin))
       .route("/cape/{username}", get(Self::get_cape))
