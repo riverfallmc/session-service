@@ -18,7 +18,7 @@ impl MultipartService {
       let content_type = field.content_type().unwrap_or("unknown");
 
       if content_type != "image/png" {
-        return Err(HttpError::new("", Some(StatusCode::BAD_REQUEST)));
+        return Err(HttpError::new("Можно установить только файлы формата .png!", Some(StatusCode::BAD_REQUEST)));
       }
 
       while let Some(chunk) = field.chunk().await.unwrap() {

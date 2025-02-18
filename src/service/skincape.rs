@@ -79,7 +79,7 @@ impl SkinCapeService {
       Self::find_skin(&skin)
         .ok_or_else(|| HttpError::new("Скин не был найден", Some(StatusCode::NOT_FOUND)))?;
 
-      return Ok(format!("{}/api/session/skin/{skin}.png", *BASE_URL));
+      return Ok(format!("{}/api/session/skin/{skin}", *BASE_URL));
     }
 
      Err(HttpError::new("Скин не был найден", Some(StatusCode::NOT_FOUND)))
@@ -109,7 +109,7 @@ impl SkinCapeService {
       Self::find_cape(&cape)
         .ok_or_else(|| HttpError::new("Плащ не был найден", Some(StatusCode::NOT_FOUND)))?;
 
-      return Ok(format!("{}/api/session/cape/{cape}.png", *BASE_URL));
+      return Ok(format!("{}/api/session/cape/{cape}", *BASE_URL));
     }
 
      Err(HttpError::new("Плащ не был найден", Some(StatusCode::NOT_FOUND)))
