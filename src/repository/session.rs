@@ -1,19 +1,20 @@
+use axum::Json;
 use diesel::prelude::*;
-use dixxxie::{connection::DbPooled, response::{HttpError, HttpResult}};
+use adjust::{database::{postgres::Postgres, Database}, response::{HttpError, HttpResult}};
 use crate::{models::session::{Session, SessionData}, schema::sessions::{self, accesstoken}, service::{auth::UserData, random::RandomService}};
 
 pub struct SessionRepository;
 
 impl SessionRepository {
   pub fn update(
-    db: &mut DbPooled,
+    db: &mut Database<Postgres>,
     user: UserData
   ) -> HttpResult<Session> {
     let user_id = user.id;
     let username = user.username;
     let new_accesstoken = RandomService::generate_access_token();
 
-    db.transaction::<Session, HttpError, _>(|db| {
+    let result = db.transaction::<Session, HttpError, _>(|db| {
       let existing_session = sessions::table
         .filter(sessions::username.eq(&username))
         .first::<Session>(db)
@@ -48,11 +49,13 @@ impl SessionRepository {
           Ok(new_session)
         }
       }
-    })
+    })?;
+
+    Ok(Json(result))
   }
 
   pub fn update_serverid(
-    db: &mut DbPooled,
+    db: &mut Database<Postgres>,
     data: SessionData
   ) -> HttpResult<usize> {
     let result = diesel::update(
@@ -64,24 +67,24 @@ impl SessionRepository {
     ).set(sessions::serverid.eq(data.serverid))
       .execute(db)?;
 
-    Ok(result)
+    Ok(Json(result))
   }
 
   pub fn find_by_username(
-    db: &mut DbPooled,
+    db: &mut Database<Postgres>,
     username: String
   ) -> HttpResult<Session> {
-    Ok(sessions::table
+    Ok(Json(sessions::table
       .filter(sessions::username.eq(username))
-      .first::<Session>(db)?)
+      .first::<Session>(db)?))
   }
 
   pub fn find_by_uuid(
-    db: &mut DbPooled,
+    db: &mut Database<Postgres>,
     uuid: String
   ) -> HttpResult<Session> {
-    Ok(sessions::table
+    Ok(Json(sessions::table
       .filter(sessions::uuid.eq(uuid))
-      .first::<Session>(db)?)
+      .first::<Session>(db)?))
   }
 }

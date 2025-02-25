@@ -1,36 +1,29 @@
 #![allow(dead_code)]
 
 use anyhow::{anyhow, Context};
+use axum::Json;
 use base64::Engine;
-use dixxxie::{connection::DbPooled, response::{HttpError, HttpResult}};
+use adjust::{database::{postgres::Postgres, Database}, response::{HttpError, HttpResult}};
 use reqwest::StatusCode;
+use serde::{Deserialize, Serialize};
 use crate::{models::session::{PlayerJoinResponse, PlayerJoinResponseProperty, PlayerJoinResponsePropertyValue, PlayerJoinResponseTextures, SessionData, TextureData}, repository::{session::SessionRepository, users::UsersRepository}, service::auth::AuthService};
 use super::{signer::SignerService, skincape::SkinCapeService, time::TimeService};
+
+#[derive(Deserialize, Serialize)]
+pub struct PlayerProfile {
+  skin: Option<String>,
+  cape: Option<String>
+}
 
 pub struct SessionService;
 
 impl SessionService {
   async fn get_player_textures(
-    db: &mut DbPooled,
+    db: &mut Database<Postgres>,
     id: String,
     name: String
   ) -> HttpResult<PlayerJoinResponsePropertyValue> {
-    let mut textures = PlayerJoinResponseTextures::default();
-
-    let user = UsersRepository::get_by_username(db, name.clone())?
-      .context(anyhow!("Игрок не был найден"))?;
-
-    if let Ok(url) = SkinCapeService::check_skin_url(&user) {
-      textures.skin = Some(TextureData {
-        url
-      })
-    }
-
-    if let Ok(url) = SkinCapeService::check_cape_url(&user) {
-      textures.cape = Some(TextureData {
-        url
-      })
-    }
+    let textures = Self::profile(db, &name)?.0;
 
     let textures = PlayerJoinResponsePropertyValue {
       timestamp: TimeService::get_timestamp()?,
@@ -39,11 +32,35 @@ impl SessionService {
       textures,
     };
 
-    Ok(textures)
+    Ok(Json(textures))
+  }
+
+  pub fn profile(
+    db: &mut Database<Postgres>,
+    username: &str
+  ) -> HttpResult<PlayerJoinResponseTextures> {
+    let mut textures = PlayerJoinResponseTextures::default();
+
+    let user = UsersRepository::get_by_username(db, username.to_string())?.0
+      .context(anyhow!("Игрок не был найден"))?;
+
+    if let Ok(url) = SkinCapeService::check_skin_url(&user) {
+      textures.skin = Some(TextureData {
+        url: url.0
+      })
+    }
+
+    if let Ok(url) = SkinCapeService::check_cape_url(&user) {
+      textures.cape = Some(TextureData {
+        url: url.0
+      })
+    }
+
+    Ok(Json(textures))
   }
 
   async fn user_profile(
-    db: &mut DbPooled,
+    db: &mut Database<Postgres>,
     id: String,
     name: String,
     unsigned: bool
@@ -52,7 +69,7 @@ impl SessionService {
       .await?;
 
     let value = base64::engine::general_purpose::STANDARD
-        .encode(serde_json::to_string(&textures)?);
+        .encode(serde_json::to_string(&textures.0)?);
 
     let mut properties = PlayerJoinResponseProperty {
       name: String::from("textures"),
@@ -64,59 +81,59 @@ impl SessionService {
       properties.signature = Some(SignerService::sign(&value)?);
     }
 
-    Ok(PlayerJoinResponse {
+    Ok(Json(PlayerJoinResponse {
       id,
       name,
       properties: vec![properties]
-    })
+    }))
   }
 
   pub async fn login(
-    db: &mut DbPooled,
+    db: &mut Database<Postgres>,
     token: String
   ) -> HttpResult<SessionData> {
     let user = AuthService::get_by_token(token)
       .await
       .map_err(|e| anyhow!("Ошибка сервера авторизации: {e}"))?;
 
-    let data = SessionRepository::update(db, user)
+    let data = SessionRepository::update(db, user.0)
       .map_err(|e| anyhow!("Неизвестная ошибка: {e}"))?;
 
-    Ok(data.into())
+    Ok(Json(data.0.into()))
   }
 
   pub fn join(
-    db: &mut DbPooled,
+    db: &mut Database<Postgres>,
     data: SessionData
   ) -> HttpResult<usize> {
     SessionRepository::update_serverid(db, data)
   }
 
   pub async fn has_joined(
-    db: &mut DbPooled,
+    db: &mut Database<Postgres>,
     username: String,
     server_id: String
   ) -> HttpResult<PlayerJoinResponse> {
     let session = SessionRepository::find_by_username(db, username.clone())
       .map_err(|_| HttpError::new("Сессия не была найдена", Some(StatusCode::UNAUTHORIZED)))?;
 
-    if session.serverid.unwrap_or_default() != server_id {
+    if session.0.serverid.unwrap_or_default() != server_id {
       return Err(HttpError::new("Сессия не была найдена", Some(StatusCode::UNAUTHORIZED)));
     }
 
-    Self::user_profile(db, session.uuid, username, false)
+    Self::user_profile(db, session.0.uuid, username, false)
       .await
   }
 
   pub async fn get_profile(
-    db: &mut DbPooled,
+    db: &mut Database<Postgres>,
     uuid: String,
     unsigned: bool
   ) -> HttpResult<PlayerJoinResponse> {
     let session = SessionRepository::find_by_uuid(db, uuid.clone())
       .map_err(|_| HttpError::new("Сессия не была найдена", Some(StatusCode::UNAUTHORIZED)))?;
 
-    Self::user_profile(db, session.uuid, session.username, unsigned)
+    Self::user_profile(db, session.0.uuid, session.0.username, unsigned)
       .await
   }
 }

@@ -1,6 +1,7 @@
 use std::env;
 
-use dixxxie::response::{HttpError, HttpResult};
+use adjust::response::{HttpError, HttpResult};
+use axum::Json;
 use once_cell::sync::Lazy;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -28,7 +29,7 @@ impl AuthService {
       .send()
       .await?;
 
-    Ok(result.json().await?)
+    Ok(Json(result.json().await?))
   }
 
   pub async fn get_token_owner(token: String) -> HttpResult<String> {
@@ -36,10 +37,6 @@ impl AuthService {
       .await
       .map_err(|_| HttpError::new("Невалидный токен", Some(StatusCode::UNAUTHORIZED)))?;
 
-    // if &result.username != username {
-    //   return Err(HttpError::new("Невалидный токен (1)", Some(StatusCode::UNAUTHORIZED)))
-    // }
-
-    Ok(result.username)
+    Ok(Json(result.0.username))
   }
 }

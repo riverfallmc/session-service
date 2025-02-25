@@ -1,6 +1,6 @@
 use anyhow::Context;
 use axum::{extract::{Multipart, Path, State}, http::HeaderMap, response::Response, routing::{get, post}, Json};
-use dixxxie::{controller::Controller, response::{HttpError, HttpMessage, HttpResult}};
+use adjust::{controller::Controller, response::{HttpError, HttpMessage, HttpResult, NonJsonHttpResult}};
 use reqwest::StatusCode;
 use crate::{service::skincape::SkinCapeService, AppState};
 
@@ -9,16 +9,16 @@ pub struct SkinCapeController;
 impl SkinCapeController {
   async fn get_skin(
     Path(img): Path<String>
-  ) -> HttpResult<Response> {
-    SkinCapeService::get_skin(img)
-      .await
+  ) -> NonJsonHttpResult<Response> {
+    Ok(SkinCapeService::get_skin(img)
+      .await?.0)
   }
 
   async fn get_cape(
     Path(img): Path<String>
-  ) -> HttpResult<Response> {
-    SkinCapeService::get_cape(img)
-      .await
+  ) -> NonJsonHttpResult<Response> {
+    Ok(SkinCapeService::get_cape(img)
+      .await?.0)
   }
 
   fn get_authorization(
@@ -40,17 +40,17 @@ impl SkinCapeController {
       .get(1)
       .context(HttpError::new("Authorization Bearer не предоставлен", Some(StatusCode::UNAUTHORIZED)))?;
 
-    Ok(token.to_string())
+    Ok(Json(token.to_string()))
   }
   async fn update_skin(
     headers: HeaderMap,
     State(state): State<AppState>,
     multipart: Multipart,
-  ) -> HttpResult<Json<HttpMessage>> {
+  ) -> HttpResult<HttpMessage> {
     let token = Self::get_authorization(&headers)?;
     let mut db = state.postgres.get()?;
 
-    SkinCapeService::update_skin(&mut db, token, multipart)
+    SkinCapeService::update_skin(&mut db, token.0, multipart)
       .await
   }
 
@@ -58,17 +58,22 @@ impl SkinCapeController {
     headers: HeaderMap,
     State(state): State<AppState>,
     multipart: Multipart,
-  ) -> HttpResult<Json<HttpMessage>> {
+  ) -> HttpResult<HttpMessage> {
     let token = Self::get_authorization(&headers)?;
     let mut db = state.postgres.get()?;
 
-    SkinCapeService::update_cape(&mut db, token, multipart)
+    SkinCapeService::update_cape(&mut db, token.0, multipart)
       .await
   }
 }
 
 impl Controller<AppState> for SkinCapeController {
+  fn new() -> anyhow::Result<Box<Self>> {
+    Ok(Box::new(Self))
+  }
+
   fn register(&self, router: axum::Router<AppState>) -> axum::Router<AppState> {
+    #[allow(unused)]
     SkinCapeService::valid_folders()
       .expect("unable to create dirs");
 

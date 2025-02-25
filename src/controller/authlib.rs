@@ -1,7 +1,6 @@
 use std::{collections::HashMap, fs::File, io::Read};
-
+use adjust::controller::Controller;
 use axum::{routing::get, Json};
-use dixxxie::controller::Controller;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use crate::AppState;
@@ -77,6 +76,10 @@ impl AuthlibController {
 }
 
 impl Controller<AppState> for AuthlibController {
+  fn new() -> anyhow::Result<Box<Self>> {
+    Ok(Box::new(Self))
+  }
+
   fn register(&self, router: axum::Router<AppState>) -> axum::Router<AppState> {
     router
       .route("/", get(Self::get_authlib_info))

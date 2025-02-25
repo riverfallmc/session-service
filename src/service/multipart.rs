@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
-use axum::extract::Multipart;
-use dixxxie::response::{HttpError, HttpResult};
+use axum::{extract::Multipart, Json};
+use adjust::response::{HttpError, HttpResult};
 use reqwest::StatusCode;
 
 pub struct MultipartService;
@@ -32,6 +32,6 @@ impl MultipartService {
       }
     }
 
-    Ok(data)
+    Ok(Json(data))
   }
 }
