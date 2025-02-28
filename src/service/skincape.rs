@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf};
+use std::{env, fs, path::PathBuf};
 use anyhow::anyhow;
 use axum::{extract::Multipart, http::StatusCode, response::Response, Json};
 use adjust::{database::{postgres::Postgres, Database}, response::{HttpError, HttpMessage, HttpResult}};
@@ -8,9 +8,8 @@ use super::{fs::FileSystemService, hasher::HasherService, multipart::MultipartSe
 
 pub static SKINCAPES_BASEDIR: Lazy<PathBuf> = Lazy::new(|| PathBuf::from("/app/data/skincapes"));
 static BASE_URL: Lazy<String> = Lazy::new(|| {
-  // TODO @ вернуть ссылки
-  #[allow(clippy::if_same_then_else)]
-  if cfg!(debug_assertions) {String::from("https://localhost")} else {String::from("https://localhost")}
+  env::var("OVERRIDE_LINK")
+    .unwrap_or("https://riverfall.ru".to_string())
 });
 
 enum FileSaveType {
