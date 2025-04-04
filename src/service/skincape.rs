@@ -1,9 +1,9 @@
 use std::{env, fs, path::PathBuf};
 use anyhow::anyhow;
-use axum::{extract::Multipart, http::StatusCode, response::Response, Json};
-use adjust::{database::{postgres::Postgres, Database}, response::{HttpError, HttpMessage, HttpResult}};
+use axum::{extract::Multipart, http::StatusCode, response::Response};
+use adjust::{database::{postgres::Postgres, Database}, response::{HttpError, HttpMessage, NonJsonHttpResult}};
 use once_cell::sync::Lazy;
-use crate::{models::users::User, repository::users::UsersRepository, service::auth::AuthService};
+use crate::{models::users::{GlobalUserData, User}, repository::users::UsersRepository};
 use super::{fs::FileSystemService, hasher::HasherService, multipart::MultipartService};
 
 pub static SKINCAPES_BASEDIR: Lazy<PathBuf> = Lazy::new(|| PathBuf::from("/app/data/skincapes"));
@@ -56,19 +56,19 @@ impl SkinCapeService {
   pub fn get_skin_url(
     db: &mut Database<Postgres>,
     username: &str
-  ) -> HttpResult<String> {
+  ) -> NonJsonHttpResult<String> {
     let user = UsersRepository::get_by_username(db, username.to_string())?;
 
     if user.is_none() {
       return Err(HttpError::new("Игрок не был найден", Some(StatusCode::NOT_FOUND)));
     }
 
-    Self::check_skin_url(&user.0.unwrap())
+    Self::check_skin_url(&user.unwrap())
   }
 
   pub fn check_skin_url(
     user: &User
-  ) -> HttpResult<String> {
+  ) -> NonJsonHttpResult<String> {
     let img = user.skin
       .clone();
 
@@ -76,7 +76,7 @@ impl SkinCapeService {
       Self::find_skin(&skin)
         .ok_or_else(|| HttpError::new("Скин не был найден", Some(StatusCode::NOT_FOUND)))?;
 
-      return Ok(Json(format!("{}/api/session/skin/{skin}", *BASE_URL)));
+      return Ok(format!("{}/api/session/skin/{skin}", *BASE_URL));
     }
 
      Err(HttpError::new("Скин не был найден", Some(StatusCode::NOT_FOUND)))
@@ -86,19 +86,19 @@ impl SkinCapeService {
   pub fn get_cape_url(
     db: &mut Database<Postgres>,
     username: &str
-  ) -> HttpResult<String> {
+  ) -> NonJsonHttpResult<String> {
     let user = UsersRepository::get_by_username(db, username.to_string())?;
 
     if user.is_none() {
       return Err(HttpError::new("Игрок не был найден", Some(StatusCode::NOT_FOUND)));
     }
 
-    Self::check_cape_url(&user.0.unwrap())
+    Self::check_cape_url(&user.unwrap())
   }
 
   pub fn check_cape_url(
     user: &User
-  ) -> HttpResult<String> {
+  ) -> NonJsonHttpResult<String> {
     let img = user.cape
       .clone();
 
@@ -106,7 +106,7 @@ impl SkinCapeService {
       Self::find_cape(&cape)
         .ok_or_else(|| HttpError::new("Плащ не был найден", Some(StatusCode::NOT_FOUND)))?;
 
-      return Ok(Json(format!("{}/api/session/cape/{cape}", *BASE_URL)));
+      return Ok(format!("{}/api/session/cape/{cape}", *BASE_URL));
     }
 
      Err(HttpError::new("Плащ не был найден", Some(StatusCode::NOT_FOUND)))
@@ -114,7 +114,7 @@ impl SkinCapeService {
 
   pub async fn get_skin(
     img: String
-  ) -> HttpResult<Response> {
+  ) -> NonJsonHttpResult<Response> {
     let path = Self::find_skin(&img)
       .ok_or_else(|| HttpError::new("Скин не был найден", Some(StatusCode::NOT_FOUND)))?;
 
@@ -124,7 +124,7 @@ impl SkinCapeService {
 
   pub async fn get_cape(
     img: String
-  ) -> HttpResult<Response> {
+  ) -> NonJsonHttpResult<Response> {
     let path = Self::find_cape(&img)
       .ok_or_else(|| HttpError::new("Плащ не был найден", Some(StatusCode::NOT_FOUND)))?;
 
@@ -134,14 +134,11 @@ impl SkinCapeService {
 
   async fn save_file(
     db: &mut Database<Postgres>,
-    token: String,
+    username: String,
     multipart: Multipart,
     success_text: &str,
     r#type: FileSaveType
-  ) -> HttpResult<HttpMessage> {
-    let username = AuthService::get_token_owner(token)
-      .await?;
-
+  ) -> NonJsonHttpResult<HttpMessage> {
     let content = MultipartService::read(multipart)
       .await?;
 
@@ -149,46 +146,46 @@ impl SkinCapeService {
     let img = format!("{hashed}.png");
 
     #[allow(unused)]
-    FileSystemService::save(img.clone(), content.0)
+    FileSystemService::save(img.clone(), content)
       .await
       .map_err(|e| HttpError(anyhow!("Не получилось сохранить: {e}"), None))?;
 
     #[allow(unused)]
     match r#type {
       FileSaveType::Skin => {
-        UsersRepository::set_skin(db, username.0, Some(img))
+        UsersRepository::set_skin(db, username, Some(img))
           .await?;
       },
       FileSaveType::Cape => {
-        UsersRepository::set_cape(db, username.0, Some(img))
+        UsersRepository::set_cape(db, username, Some(img))
           .await?;
       }
     }
 
-    Ok(Json(HttpMessage::new(success_text)))
+    Ok(HttpMessage::new(success_text))
   }
 
   pub async fn update_skin(
     db: &mut Database<Postgres>,
-    token: String,
+    user: GlobalUserData,
     skin: Multipart
-  ) -> HttpResult<HttpMessage> {
-    Self::save_file(db, token, skin, "Скин был успешно применён", FileSaveType::Skin)
+  ) -> NonJsonHttpResult<HttpMessage> {
+    Self::save_file(db, user.username, skin, "Скин был успешно применён", FileSaveType::Skin)
       .await
   }
 
   pub async fn update_cape(
     db: &mut Database<Postgres>,
-    token: String,
+    user: GlobalUserData,
     cape: Multipart
-  ) -> HttpResult<HttpMessage> {
-    Self::save_file(db, token, cape, "Плащ был успешно применён", FileSaveType::Cape)
-    .await
+  ) -> NonJsonHttpResult<HttpMessage> {
+    Self::save_file(db, user.username, cape, "Плащ был успешно применён", FileSaveType::Cape)
+      .await
   }
 
-  pub fn valid_folders() -> HttpResult<()> {
+  pub fn valid_folders() -> NonJsonHttpResult<()> {
     let _ = fs::create_dir(SKINCAPES_BASEDIR.as_path());
 
-    Ok(Json(()))
+    Ok(())
   }
 }

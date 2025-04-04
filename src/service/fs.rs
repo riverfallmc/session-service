@@ -1,19 +1,19 @@
 use std::path::{Path, PathBuf};
-use axum::{body::Body, http::{header, StatusCode}, response::Response, Json};
-use adjust::response::{HttpError, HttpResult};
+use axum::{body::Body, http::{header, StatusCode}, response::Response};
+use adjust::response::{HttpError, NonJsonHttpResult};
 use tokio::{fs::{self, File}, io::AsyncWriteExt};
 
 pub struct FileSystemService {}
 
 impl FileSystemService {
-  pub async fn read_file(path: PathBuf) -> HttpResult<Response> {
+  pub async fn read_file(path: PathBuf) -> NonJsonHttpResult<Response> {
     let content = fs::read(path)
       .await?;
 
-    Ok(Json(Response::builder()
+    Ok(Response::builder()
       .status(StatusCode::OK)
       .header(header::CONTENT_TYPE, "image/png")
-      .body(Body::from(content))?))
+      .body(Body::from(content))?)
   }
 
   fn get_path(filename: &String) -> String {
@@ -23,12 +23,12 @@ impl FileSystemService {
   pub async fn save(
     filename: String,
     content: Vec<u8>
-  ) -> HttpResult<()> {
+  ) -> NonJsonHttpResult<()> {
     let path_str = Self::get_path(&filename);
     let path = Path::new(&path_str);
 
     if path.exists() {
-      return Ok(Json(()))
+      return Ok(())
     }
 
     let mut file = File::create_new(path)
@@ -37,10 +37,10 @@ impl FileSystemService {
     file.write_all(&content)
       .await?;
 
-      Ok(Json(()))
+      Ok(())
   }
 
-  pub async fn remove(filename: String) -> HttpResult<()> {
+  pub async fn remove(filename: String) -> NonJsonHttpResult<()> {
     let path = Self::get_path(&filename);
 
     if !Path::new(&path).is_file() {
@@ -50,6 +50,6 @@ impl FileSystemService {
     fs::remove_file(path)
       .await?;
 
-    Ok(Json(()))
+    Ok(())
   }
 }

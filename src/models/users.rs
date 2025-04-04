@@ -12,3 +12,9 @@ pub struct User {
   pub skin: Option<String>,
   pub cape: Option<String>,
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GlobalUserData {
+  pub id: i32,
+  pub username: String
+}

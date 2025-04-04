@@ -1,4 +1,3 @@
-pub mod auth;
 pub mod fs;
 pub mod hasher;
 pub mod multipart;
@@ -7,3 +6,5 @@ pub mod session;
 pub mod signer;
 pub mod skincape;
 pub mod time;
+pub mod user;
+pub mod invite;

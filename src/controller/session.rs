@@ -1,12 +1,7 @@
 use adjust::{controller::Controller, response::HttpResult};
 use axum::{extract::{Path, Query, State}, routing::{get, post}, Json};
 use serde::{Deserialize, Serialize};
-use crate::{models::session::{PlayerJoinResponse, PlayerJoinResponseTextures, SessionData}, service::session::SessionService, AppState};
-
-#[derive(Serialize, Deserialize)]
-pub struct JWTBody {
-  pub token: String
-}
+use crate::{models::{session::{PlayerJoinResponse, PlayerJoinResponseTextures, SessionData}, users::GlobalUserData}, service::session::SessionService, AppState};
 
 #[derive(Serialize, Deserialize)]
 struct HasJoinedQuery {
@@ -25,12 +20,12 @@ pub struct SessionController;
 impl SessionController {
   async fn login(
     State(state): State<AppState>,
-    Json(body): Json<JWTBody>
+    Query(user): Query<GlobalUserData>
   ) -> HttpResult<SessionData> {
     let mut db = state.postgres.get()?;
 
-    SessionService::login(&mut db, body.token)
-      .await
+    Ok(Json(SessionService::login(&mut db, user)
+      .await?))
   }
 
   async fn join(
@@ -51,7 +46,7 @@ impl SessionController {
   ) -> HttpResult<PlayerJoinResponseTextures> {
     let mut db = state.postgres.get()?;
 
-    SessionService::profile(&mut db, &username)
+    Ok(Json(SessionService::profile(&mut db, &username)?))
   }
 
   async fn has_joined(
@@ -60,7 +55,8 @@ impl SessionController {
   ) -> HttpResult<PlayerJoinResponse> {
     let mut db = state.postgres.get()?;
 
-    SessionService::has_joined(&mut db, query.username, query.server_id).await
+    Ok(Json(SessionService::has_joined(&mut db, query.username, query.server_id)
+      .await?))
   }
 
   async fn get_profile(
@@ -70,7 +66,8 @@ impl SessionController {
   ) -> HttpResult<PlayerJoinResponse> {
     let mut db = state.postgres.get()?;
 
-    SessionService::get_profile(&mut db, uuid, query.unsigned.unwrap_or_default()).await
+    Ok(Json(SessionService::get_profile(&mut db, uuid, query.unsigned.unwrap_or_default())
+      .await?))
   }
 }
 

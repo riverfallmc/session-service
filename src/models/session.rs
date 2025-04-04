@@ -14,6 +14,17 @@ pub struct Session {
   pub serverid: Option<String>,
 }
 
+#[derive(Queryable, Selectable, Insertable, Serialize, Deserialize, Clone)]
+#[diesel(table_name = sessions)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct SessionAdd {
+  pub user_id: i32,
+  pub username: String,
+  pub uuid: String,
+  pub accesstoken: String,
+  pub serverid: Option<String>,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct SessionData {
   /// uuid

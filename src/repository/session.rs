@@ -1,18 +1,21 @@
-use axum::Json;
 use diesel::prelude::*;
-use adjust::{database::{postgres::Postgres, Database}, response::{HttpError, HttpResult}};
-use crate::{models::session::{Session, SessionData}, schema::sessions::{self, accesstoken}, service::{auth::UserData, random::RandomService}};
+use adjust::{database::{postgres::Postgres, Database}, response::{HttpError, NonJsonHttpResult}};
+use crate::{models::{session::{Session, SessionAdd, SessionData}, users::GlobalUserData}, schema::sessions::{self, accesstoken}, service::random::RandomService};
+
+use super::users::UsersRepository;
 
 pub struct SessionRepository;
 
 impl SessionRepository {
   pub fn update(
     db: &mut Database<Postgres>,
-    user: UserData
-  ) -> HttpResult<Session> {
+    user: GlobalUserData
+  ) -> NonJsonHttpResult<Session> {
     let user_id = user.id;
     let username = user.username;
     let new_accesstoken = RandomService::generate_access_token();
+
+    UsersRepository::ensure_user_exists(db, &username)?;
 
     let result = db.transaction::<Session, HttpError, _>(|db| {
       let existing_session = sessions::table
@@ -32,8 +35,7 @@ impl SessionRepository {
         }
         None => {
           // создаем новую сессию
-          let new_session = Session {
-            id: 0,
+          let new_session = SessionAdd {
             user_id,
             username: username.clone(),
             uuid: RandomService::generate_uuid(username.clone())?,
@@ -42,22 +44,22 @@ impl SessionRepository {
           };
 
           // пихаем в бд
-          diesel::insert_into(sessions::table)
+          let new_session = diesel::insert_into(sessions::table)
             .values(&new_session)
-            .execute(db)?;
+            .get_result::<Session>(db)?;
 
           Ok(new_session)
         }
       }
     })?;
 
-    Ok(Json(result))
+    Ok(result)
   }
 
   pub fn update_serverid(
     db: &mut Database<Postgres>,
     data: SessionData
-  ) -> HttpResult<usize> {
+  ) -> NonJsonHttpResult<usize> {
     let result = diesel::update(
         sessions::table
         .filter(
@@ -67,24 +69,24 @@ impl SessionRepository {
     ).set(sessions::serverid.eq(data.serverid))
       .execute(db)?;
 
-    Ok(Json(result))
+    Ok(result)
   }
 
   pub fn find_by_username(
     db: &mut Database<Postgres>,
     username: String
-  ) -> HttpResult<Session> {
-    Ok(Json(sessions::table
+  ) -> NonJsonHttpResult<Session> {
+    Ok(sessions::table
       .filter(sessions::username.eq(username))
-      .first::<Session>(db)?))
+      .first::<Session>(db)?)
   }
 
   pub fn find_by_uuid(
     db: &mut Database<Postgres>,
     uuid: String
-  ) -> HttpResult<Session> {
-    Ok(Json(sessions::table
+  ) -> NonJsonHttpResult<Session> {
+    Ok(sessions::table
       .filter(sessions::uuid.eq(uuid))
-      .first::<Session>(db)?))
+      .first::<Session>(db)?)
   }
 }

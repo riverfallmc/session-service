@@ -1,12 +1,11 @@
-use adjust::{database::{postgres::Postgres, Database}, response::HttpResult};
-use axum::Json;
+use adjust::{database::{postgres::Postgres, Database}, response::NonJsonHttpResult};
 use diesel::prelude::*;
 use crate::{schema::skincape_cache::dsl::*, service::fs::FileSystemService};
 
 pub struct SkinCapeCacheRepository;
 
 impl SkinCapeCacheRepository {
-  pub fn add(db: &mut Database<Postgres>, file_name: String) -> HttpResult<()> {
+  pub fn add(db: &mut Database<Postgres>, file_name: String) -> NonJsonHttpResult<()> {
     diesel::insert_into(skincape_cache)
       .values((name.eq(&file_name), user_count.eq(1)))
       .on_conflict(name)
@@ -14,10 +13,10 @@ impl SkinCapeCacheRepository {
       .set(user_count.eq(user_count + 1))
       .execute(db)?;
 
-    Ok(Json(()))
+    Ok(())
   }
 
-  pub async fn remove(db: &mut Database<Postgres>, file_name: String) -> HttpResult<()> {
+  pub async fn remove(db: &mut Database<Postgres>, file_name: String) -> NonJsonHttpResult<()> {
     let count: i64 = skincape_cache
       .select(user_count)
       .filter(name.eq(&file_name))
@@ -41,6 +40,6 @@ impl SkinCapeCacheRepository {
       _ => {}
     }
 
-    Ok(Json(()))
+    Ok(())
   }
 }

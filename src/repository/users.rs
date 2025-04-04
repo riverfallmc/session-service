@@ -1,7 +1,6 @@
 use adjust::database::postgres::Postgres;
 use adjust::database::Database;
-use adjust::response::HttpResult;
-use axum::Json;
+use adjust::response::NonJsonHttpResult;
 use diesel::prelude::*;
 use crate::models::users::User;
 use crate::schema::users::dsl::*;
@@ -10,13 +9,13 @@ use crate::repository::skincapecache::SkinCapeCacheRepository;
 pub struct UsersRepository;
 
 impl UsersRepository {
-  async fn ensure_user_exists(db: &mut Database<Postgres>, user_name: &str) -> HttpResult<i32> {
+  pub fn ensure_user_exists(db: &mut Database<Postgres>, user_name: &str) -> NonJsonHttpResult<i32> {
     if let Ok(user_id) = users
       .select(id)
       .filter(username.eq(user_name))
       .first::<i32>(db)
     {
-      return Ok(Json(user_id));
+      return Ok(user_id);
     }
 
     let new_user = diesel::insert_into(users)
@@ -24,34 +23,34 @@ impl UsersRepository {
       .returning(id)
       .get_result::<i32>(db)?;
 
-    Ok(Json(new_user))
+    Ok(new_user)
   }
 
   #[allow(unused)]
-  pub async fn get_by_id(db: &mut Database<Postgres>, user_id: i32) -> HttpResult<Option<(i32, String, Option<String>, Option<String>)>> {
+  pub async fn get_by_id(db: &mut Database<Postgres>, user_id: i32) -> NonJsonHttpResult<Option<(i32, String, Option<String>, Option<String>)>> {
     let user = users
       .select((id, username, skin, cape))
       .filter(id.eq(user_id))
       .first::<(i32, String, Option<String>, Option<String>)>(db)
       .optional()?;
 
-    Ok(Json(user))
+    Ok(user)
   }
 
   #[allow(unused)]
-  pub fn get_by_username(db: &mut Database<Postgres>, user_name: String) -> HttpResult<Option<User>> {
+  pub fn get_by_username(db: &mut Database<Postgres>, user_name: String) -> NonJsonHttpResult<Option<User>> {
     let user = users
       .select((id, username, skin, cape))
       .filter(username.eq(user_name))
       .first::<User>(db)
       .optional()?;
 
-    Ok(Json(user))
+    Ok(user)
   }
 
   // Установка скина пользователю
-  pub async fn set_skin(db: &mut Database<Postgres>, user_name: String, new_skin: Option<String>) -> HttpResult<()> {
-    let user_id = *Self::ensure_user_exists(db, &user_name).await?;
+  pub async fn set_skin(db: &mut Database<Postgres>, user_name: String, new_skin: Option<String>) -> NonJsonHttpResult<()> {
+    let user_id = Self::ensure_user_exists(db, &user_name)?;
 
     // Получаем текущий скин
     let current_skin: Option<String> = users
@@ -77,11 +76,11 @@ impl UsersRepository {
       .set(skin.eq(new_skin))
       .execute(db)?;
 
-    Ok(Json(()))
+    Ok(())
   }
 
-  pub async fn set_cape(db: &mut Database<Postgres>, user_name: String, new_cape: Option<String>) -> HttpResult<()> {
-    let user_id = *Self::ensure_user_exists(db, &user_name).await?;
+  pub async fn set_cape(db: &mut Database<Postgres>, user_name: String, new_cape: Option<String>) -> NonJsonHttpResult<()> {
+    let user_id = Self::ensure_user_exists(db, &user_name)?;
 
     // Получаем текущий плащ
     let current_cape: Option<String> = users
@@ -107,12 +106,12 @@ impl UsersRepository {
       .set(cape.eq(new_cape))
       .execute(db)?;
 
-    Ok(Json(()))
+    Ok(())
   }
 
   #[allow(unused)]
-  pub async fn delete(db: &mut Database<Postgres>, user_name: String) -> HttpResult<()> {
-    let user_id = *Self::ensure_user_exists(db, &user_name).await?;
+  pub async fn delete(db: &mut Database<Postgres>, user_name: String) -> NonJsonHttpResult<()> {
+    let user_id = Self::ensure_user_exists(db, &user_name)?;
 
     // Получаем скин и плащ перед удалением
     let (current_skin, current_cape): (Option<String>, Option<String>) = users
@@ -135,6 +134,6 @@ impl UsersRepository {
     diesel::delete(users.filter(id.eq(user_id)))
       .execute(db)?;
 
-    Ok(Json(()))
+    Ok(())
   }
 }

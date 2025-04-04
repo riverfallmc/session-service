@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
-use axum::{extract::Multipart, Json};
-use adjust::response::{HttpError, HttpResult};
+use axum::extract::Multipart;
+use adjust::response::{HttpError, NonJsonHttpResult};
 use reqwest::StatusCode;
 
 pub struct MultipartService;
@@ -10,7 +10,7 @@ pub struct MultipartService;
 const MAX_FILE_SIZE: usize = 2 * (1024 * 1024);
 
 impl MultipartService {
-  pub async fn read(mut multipart: Multipart) -> HttpResult<Vec<u8>> {
+  pub async fn read(mut multipart: Multipart) -> NonJsonHttpResult<Vec<u8>> {
     let mut data = Vec::new();
     let mut total_size = 0;
 
@@ -32,6 +32,6 @@ impl MultipartService {
       }
     }
 
-    Ok(Json(data))
+    Ok(data)
   }
 }

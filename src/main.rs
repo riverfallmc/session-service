@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use adjust::{controllers, controller::Controller, database::{postgres::Postgres, Pool}, main, service::Service};
-use controller::{authlib::AuthlibController, session::SessionController, skincape::SkinCapeController};
+use controller::{authlib::AuthlibController, invite::InviteController, session::SessionController, skincape::SkinCapeController};
 
 mod repository;
 mod controller;
@@ -15,11 +15,11 @@ pub struct AppState {
 }
 
 #[main]
-async fn main() -> Service<'_, AppState> {
+async fn main() -> Service<AppState> {
   Service {
     name: "Session",
     state: AppState::default(),
-    controllers: controllers![AuthlibController, SessionController, SkinCapeController],
+    controllers: controllers![AuthlibController, InviteController, SessionController, SkinCapeController],
     ..Default::default()
   }
 }

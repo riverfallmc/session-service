@@ -1,11 +1,12 @@
 [package]
 name = "session-service"
 authors = ["smokingplaya"]
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 
 [dependencies]
 adjust = "0.1.24"
+# adjust = { path = "/home/smokkkin/projects/riverfallmc/adjust-rs" }
 anyhow = "1.0.95"
 base64 = "0.22.1"
 hex = "0.4.3"
